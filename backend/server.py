@@ -31,6 +31,7 @@ api_router = APIRouter(prefix="/api")
 security = HTTPBasic()
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "firesafety2025"
+RESET_CODE = "APEX2025RESET"  # Simple reset code for demo
 
 def get_current_admin(credentials: HTTPBasicCredentials = Depends(security)):
     is_correct_username = secrets.compare_digest(credentials.username, ADMIN_USERNAME)
@@ -56,6 +57,12 @@ class ExtinguisherStatus(str, Enum):
     REFILL_DUE = "refill_due"
     PRESSURE_TEST_DUE = "pressure_test_due"
     MAINTENANCE = "maintenance"
+
+class MaintenanceItemStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    OVERDUE = "overdue"
 
 # Models
 class SmokeDetector(BaseModel):
@@ -105,6 +112,42 @@ class FireExtinguisherUpdate(BaseModel):
     last_refill: Optional[datetime] = None
     last_pressure_test: Optional[datetime] = None
 
+class MaintenanceNote(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    note: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_by: str = "system"
+
+class MaintenanceItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: Optional[str] = ""
+    status: MaintenanceItemStatus = MaintenanceItemStatus.PENDING
+    priority: str = "medium"  # low, medium, high
+    assigned_to: Optional[str] = None
+    due_date: Optional[datetime] = None
+    notes: List[MaintenanceNote] = []
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class MaintenanceItemCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    priority: str = "medium"
+    assigned_to: Optional[str] = None
+    due_date: Optional[datetime] = None
+
+class MaintenanceItemUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[MaintenanceItemStatus] = None
+    priority: Optional[str] = None
+    assigned_to: Optional[str] = None
+    due_date: Optional[datetime] = None
+
+class MaintenanceNoteCreate(BaseModel):
+    note: str
+
 class Alert(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     detector_id: Optional[str] = None
@@ -125,6 +168,14 @@ class AlertCreate(BaseModel):
 class AdminLogin(BaseModel):
     username: str
     password: str
+
+class PasswordReset(BaseModel):
+    reset_code: str
+    new_password: str
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
 
 # Helper functions
 def calculate_due_dates(last_refill: datetime, last_pressure_test: datetime):
@@ -159,9 +210,21 @@ def is_extinguisher_due(extinguisher: FireExtinguisher) -> dict:
         "days_until_pressure_test": days_until_pressure_test
     }
 
+def check_maintenance_item_status(item: MaintenanceItem) -> MaintenanceItemStatus:
+    if item.status in [MaintenanceItemStatus.COMPLETED, MaintenanceItemStatus.IN_PROGRESS]:
+        return item.status
+    
+    if item.due_date:
+        now = datetime.utcnow()
+        if now > item.due_date:
+            return MaintenanceItemStatus.OVERDUE
+    
+    return MaintenanceItemStatus.PENDING
+
 # Authentication endpoints
 @api_router.post("/admin/login")
 async def admin_login(login_data: AdminLogin):
+    global ADMIN_PASSWORD
     if login_data.username == ADMIN_USERNAME and login_data.password == ADMIN_PASSWORD:
         return {"message": "Login successful", "admin": True}
     raise HTTPException(
@@ -172,6 +235,32 @@ async def admin_login(login_data: AdminLogin):
 @api_router.get("/admin/verify")
 async def verify_admin(admin: str = Depends(get_current_admin)):
     return {"message": "Admin verified", "admin": admin}
+
+@api_router.post("/admin/reset-password")
+async def reset_password(reset_data: PasswordReset):
+    global ADMIN_PASSWORD
+    if reset_data.reset_code == RESET_CODE:
+        ADMIN_PASSWORD = reset_data.new_password
+        return {"message": "Password reset successful"}
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid reset code"
+    )
+
+@api_router.post("/admin/change-password")
+async def change_password(password_data: PasswordChange, admin: str = Depends(get_current_admin)):
+    global ADMIN_PASSWORD
+    if password_data.current_password == ADMIN_PASSWORD:
+        ADMIN_PASSWORD = password_data.new_password
+        return {"message": "Password changed successfully"}
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid current password"
+    )
+
+@api_router.get("/admin/reset-code")
+async def get_reset_code():
+    return {"reset_code": RESET_CODE, "message": "Use this code to reset admin password"}
 
 # Public Smoke Detector endpoints (read-only)
 @api_router.get("/smoke-detectors", response_model=List[SmokeDetector])
@@ -437,6 +526,82 @@ async def delete_fire_extinguisher(extinguisher_id: str, admin: str = Depends(ge
         raise HTTPException(status_code=404, detail="Fire extinguisher not found")
     return {"message": "Fire extinguisher deleted successfully"}
 
+# Maintenance Items endpoints
+@api_router.get("/maintenance-items", response_model=List[MaintenanceItem])
+async def get_maintenance_items():
+    items = await db.maintenance_items.find().sort("created_at", -1).to_list(1000)
+    result = []
+    for item in items:
+        item_obj = MaintenanceItem(**item)
+        item_obj.status = check_maintenance_item_status(item_obj)
+        result.append(item_obj)
+    return result
+
+@api_router.get("/maintenance-items/{item_id}", response_model=MaintenanceItem)
+async def get_maintenance_item(item_id: str):
+    item = await db.maintenance_items.find_one({"id": item_id})
+    if not item:
+        raise HTTPException(status_code=404, detail="Maintenance item not found")
+    
+    item_obj = MaintenanceItem(**item)
+    item_obj.status = check_maintenance_item_status(item_obj)
+    return item_obj
+
+@api_router.post("/maintenance-items", response_model=MaintenanceItem)
+async def create_maintenance_item(item: MaintenanceItemCreate):
+    item_dict = item.dict()
+    item_obj = MaintenanceItem(**item_dict)
+    item_obj.status = check_maintenance_item_status(item_obj)
+    await db.maintenance_items.insert_one(item_obj.dict())
+    return item_obj
+
+@api_router.put("/maintenance-items/{item_id}", response_model=MaintenanceItem)
+async def update_maintenance_item(item_id: str, update_data: MaintenanceItemUpdate):
+    item = await db.maintenance_items.find_one({"id": item_id})
+    if not item:
+        raise HTTPException(status_code=404, detail="Maintenance item not found")
+    
+    update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
+    update_dict["updated_at"] = datetime.utcnow()
+    
+    await db.maintenance_items.update_one(
+        {"id": item_id},
+        {"$set": update_dict}
+    )
+    
+    updated_item = await db.maintenance_items.find_one({"id": item_id})
+    item_obj = MaintenanceItem(**updated_item)
+    item_obj.status = check_maintenance_item_status(item_obj)
+    return item_obj
+
+@api_router.delete("/maintenance-items/{item_id}")
+async def delete_maintenance_item(item_id: str):
+    result = await db.maintenance_items.delete_one({"id": item_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Maintenance item not found")
+    return {"message": "Maintenance item deleted successfully"}
+
+@api_router.post("/maintenance-items/{item_id}/notes", response_model=MaintenanceItem)
+async def add_maintenance_note(item_id: str, note_data: MaintenanceNoteCreate):
+    item = await db.maintenance_items.find_one({"id": item_id})
+    if not item:
+        raise HTTPException(status_code=404, detail="Maintenance item not found")
+    
+    new_note = MaintenanceNote(note=note_data.note, created_by="user")
+    
+    await db.maintenance_items.update_one(
+        {"id": item_id},
+        {
+            "$push": {"notes": new_note.dict()},
+            "$set": {"updated_at": datetime.utcnow()}
+        }
+    )
+    
+    updated_item = await db.maintenance_items.find_one({"id": item_id})
+    item_obj = MaintenanceItem(**updated_item)
+    item_obj.status = check_maintenance_item_status(item_obj)
+    return item_obj
+
 # Alert endpoints
 @api_router.get("/alerts", response_model=List[Alert])
 async def get_alerts():
@@ -472,6 +637,11 @@ async def get_dashboard():
     total_extinguishers = await db.fire_extinguishers.count_documents({})
     triggered_extinguishers = await db.fire_extinguishers.count_documents({"status": "triggered"})
     
+    # Get maintenance stats
+    total_maintenance = await db.maintenance_items.count_documents({})
+    pending_maintenance = await db.maintenance_items.count_documents({"status": "pending"})
+    overdue_maintenance = await db.maintenance_items.count_documents({"status": "overdue"})
+    
     # Get recent alerts
     recent_alerts = await db.alerts.find({"acknowledged": False}).sort("timestamp", -1).limit(10).to_list(10)
     
@@ -484,6 +654,11 @@ async def get_dashboard():
         "extinguishers": {
             "total": total_extinguishers,
             "triggered": triggered_extinguishers
+        },
+        "maintenance": {
+            "total": total_maintenance,
+            "pending": pending_maintenance,
+            "overdue": overdue_maintenance
         },
         "recent_alerts": [Alert(**alert) for alert in recent_alerts]
     }

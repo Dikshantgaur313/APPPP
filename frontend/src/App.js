@@ -10,26 +10,42 @@ const App = () => {
   const [detectors, setDetectors] = useState([]);
   const [extinguishers, setExtinguishers] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [maintenanceItems, setMaintenanceItems] = useState([]);
   const [dashboardData, setDashboardData] = useState({
     detectors: { total: 0, active: 0, triggered: 0 },
     extinguishers: { total: 0, triggered: 0 },
+    maintenance: { total: 0, pending: 0, overdue: 0 },
     recent_alerts: []
   });
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [loginData, setLoginData] = useState({ username: "", password: "" });
+  const [resetData, setResetData] = useState({ reset_code: "", new_password: "" });
   const [showAddDetector, setShowAddDetector] = useState(false);
   const [showAddExtinguisher, setShowAddExtinguisher] = useState(false);
+  const [showAddMaintenance, setShowAddMaintenance] = useState(false);
   const [showEditDetector, setShowEditDetector] = useState(false);
   const [showEditExtinguisher, setShowEditExtinguisher] = useState(false);
+  const [showEditMaintenance, setShowEditMaintenance] = useState(false);
+  const [showAddNote, setShowAddNote] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [selectedMaintenanceItem, setSelectedMaintenanceItem] = useState(null);
+  const [newNote, setNewNote] = useState("");
   const [newDetector, setNewDetector] = useState({ name: "", location: "", battery_level: 100 });
   const [newExtinguisher, setNewExtinguisher] = useState({ 
     name: "", 
     location: "", 
     last_refill: "", 
     last_pressure_test: "" 
+  });
+  const [newMaintenanceItem, setNewMaintenanceItem] = useState({
+    name: "",
+    description: "",
+    priority: "medium",
+    assigned_to: "",
+    due_date: ""
   });
 
   // Load data functions
@@ -60,6 +76,15 @@ const App = () => {
     }
   };
 
+  const loadMaintenanceItems = async () => {
+    try {
+      const response = await axios.get(`${API}/maintenance-items`);
+      setMaintenanceItems(response.data);
+    } catch (error) {
+      console.error("Error loading maintenance items:", error);
+    }
+  };
+
   const loadDashboard = async () => {
     try {
       const response = await axios.get(`${API}/dashboard`);
@@ -73,7 +98,7 @@ const App = () => {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([loadDetectors(), loadExtinguishers(), loadAlerts(), loadDashboard()]);
+      await Promise.all([loadDetectors(), loadExtinguishers(), loadAlerts(), loadMaintenanceItems(), loadDashboard()]);
       setLoading(false);
     };
     loadData();
@@ -95,6 +120,27 @@ const App = () => {
       }
     } catch (error) {
       alert("Invalid admin credentials");
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/admin/reset-password`, resetData);
+      alert("Password reset successfully!");
+      setShowForgotPassword(false);
+      setResetData({ reset_code: "", new_password: "" });
+    } catch (error) {
+      alert("Invalid reset code");
+    }
+  };
+
+  const getResetCode = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/reset-code`);
+      alert(`Reset Code: ${response.data.reset_code}\n\nUse this code to reset your password.`);
+    } catch (error) {
+      alert("Error getting reset code");
     }
   };
 
@@ -130,6 +176,23 @@ const App = () => {
       await loadDashboard();
     } catch (error) {
       alert("Error adding extinguisher");
+    }
+  };
+
+  const handleAddMaintenanceItem = async (e) => {
+    e.preventDefault();
+    try {
+      const itemToCreate = {
+        ...newMaintenanceItem,
+        due_date: newMaintenanceItem.due_date ? new Date(newMaintenanceItem.due_date).toISOString() : null
+      };
+      await axios.post(`${API}/maintenance-items`, itemToCreate);
+      setNewMaintenanceItem({ name: "", description: "", priority: "medium", assigned_to: "", due_date: "" });
+      setShowAddMaintenance(false);
+      await loadMaintenanceItems();
+      await loadDashboard();
+    } catch (error) {
+      alert("Error adding maintenance item");
     }
   };
 
@@ -170,6 +233,27 @@ const App = () => {
     }
   };
 
+  const handleEditMaintenanceItem = async (e) => {
+    e.preventDefault();
+    try {
+      const itemToUpdate = {
+        name: editingItem.name,
+        description: editingItem.description,
+        priority: editingItem.priority,
+        assigned_to: editingItem.assigned_to,
+        status: editingItem.status,
+        due_date: editingItem.due_date ? new Date(editingItem.due_date).toISOString() : null
+      };
+      await axios.put(`${API}/maintenance-items/${editingItem.id}`, itemToUpdate);
+      setShowEditMaintenance(false);
+      setEditingItem(null);
+      await loadMaintenanceItems();
+      await loadDashboard();
+    } catch (error) {
+      alert("Error updating maintenance item");
+    }
+  };
+
   const handleDeleteDetector = async (id) => {
     if (window.confirm("Are you sure you want to delete this detector?")) {
       try {
@@ -195,6 +279,32 @@ const App = () => {
       } catch (error) {
         alert("Error deleting extinguisher");
       }
+    }
+  };
+
+  const handleDeleteMaintenanceItem = async (id) => {
+    if (window.confirm("Are you sure you want to delete this maintenance item?")) {
+      try {
+        await axios.delete(`${API}/maintenance-items/${id}`);
+        await loadMaintenanceItems();
+        await loadDashboard();
+      } catch (error) {
+        alert("Error deleting maintenance item");
+      }
+    }
+  };
+
+  const handleAddNote = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/maintenance-items/${selectedMaintenanceItem.id}/notes`, {
+        note: newNote
+      });
+      setNewNote("");
+      setShowAddNote(false);
+      await loadMaintenanceItems();
+    } catch (error) {
+      alert("Error adding note");
     }
   };
 
@@ -267,6 +377,10 @@ const App = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const formatDateTime = (dateString) => {
+    return new Date(dateString).toLocaleString();
+  };
+
   const getDaysUntil = (dateString) => {
     const targetDate = new Date(dateString);
     const today = new Date();
@@ -285,6 +399,14 @@ const App = () => {
         return "bg-yellow-500";
       case "pressure_test_due":
         return "bg-orange-500";
+      case "pending":
+        return "bg-yellow-500";
+      case "in_progress":
+        return "bg-blue-500";
+      case "completed":
+        return "bg-green-500";
+      case "overdue":
+        return "bg-red-500";
       default:
         return "bg-gray-500";
     }
@@ -300,8 +422,29 @@ const App = () => {
         return "Refill Due";
       case "pressure_test_due":
         return "Pressure Test Due";
+      case "pending":
+        return "Pending";
+      case "in_progress":
+        return "In Progress";
+      case "completed":
+        return "Completed";
+      case "overdue":
+        return "Overdue";
       default:
         return status;
+    }
+  };
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case "high":
+        return "text-red-400";
+      case "medium":
+        return "text-yellow-400";
+      case "low":
+        return "text-green-400";
+      default:
+        return "text-gray-400";
     }
   };
 
@@ -368,7 +511,7 @@ const App = () => {
       <div className="bg-gray-800 border-b border-gray-700">
         <div className="max-w-7xl mx-auto px-4">
           <nav className="flex space-x-8">
-            {["dashboard", "detectors", "extinguishers", "alerts"].map((tab) => (
+            {["dashboard", "detectors", "extinguishers", "maintenance", "alerts"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -411,6 +554,15 @@ const App = () => {
                   required
                 />
               </div>
+              <div className="flex justify-between items-center mb-4">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-sm text-blue-400 hover:text-blue-300"
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <div className="flex justify-end space-x-2">
                 <button
                   type="button"
@@ -424,6 +576,60 @@ const App = () => {
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                 >
                   Login
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Forgot Password Modal */}
+      {showForgotPassword && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Reset Password</h2>
+            <div className="mb-4">
+              <button
+                onClick={getResetCode}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mb-4"
+              >
+                Get Reset Code
+              </button>
+            </div>
+            <form onSubmit={handleForgotPassword}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Reset Code</label>
+                <input
+                  type="text"
+                  value={resetData.reset_code}
+                  onChange={(e) => setResetData({...resetData, reset_code: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">New Password</label>
+                <input
+                  type="password"
+                  value={resetData.new_password}
+                  onChange={(e) => setResetData({...resetData, new_password: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Reset Password
                 </button>
               </div>
             </form>
@@ -555,6 +761,81 @@ const App = () => {
         </div>
       )}
 
+      {/* Add Maintenance Item Modal */}
+      {showAddMaintenance && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Add Maintenance Item</h2>
+            <form onSubmit={handleAddMaintenanceItem}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Name</label>
+                <input
+                  type="text"
+                  value={newMaintenanceItem.name}
+                  onChange={(e) => setNewMaintenanceItem({...newMaintenanceItem, name: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Description</label>
+                <textarea
+                  value={newMaintenanceItem.description}
+                  onChange={(e) => setNewMaintenanceItem({...newMaintenanceItem, description: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  rows="3"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Priority</label>
+                <select
+                  value={newMaintenanceItem.priority}
+                  onChange={(e) => setNewMaintenanceItem({...newMaintenanceItem, priority: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Assigned To</label>
+                <input
+                  type="text"
+                  value={newMaintenanceItem.assigned_to}
+                  onChange={(e) => setNewMaintenanceItem({...newMaintenanceItem, assigned_to: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Due Date</label>
+                <input
+                  type="date"
+                  value={newMaintenanceItem.due_date}
+                  onChange={(e) => setNewMaintenanceItem({...newMaintenanceItem, due_date: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddMaintenance(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Add Item
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Edit Detector Modal */}
       {showEditDetector && editingItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -679,12 +960,136 @@ const App = () => {
         </div>
       )}
 
+      {/* Edit Maintenance Item Modal */}
+      {showEditMaintenance && editingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Edit Maintenance Item</h2>
+            <form onSubmit={handleEditMaintenanceItem}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Name</label>
+                <input
+                  type="text"
+                  value={editingItem.name}
+                  onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Description</label>
+                <textarea
+                  value={editingItem.description}
+                  onChange={(e) => setEditingItem({...editingItem, description: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  rows="3"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Status</label>
+                <select
+                  value={editingItem.status}
+                  onChange={(e) => setEditingItem({...editingItem, status: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Priority</label>
+                <select
+                  value={editingItem.priority}
+                  onChange={(e) => setEditingItem({...editingItem, priority: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Assigned To</label>
+                <input
+                  type="text"
+                  value={editingItem.assigned_to || ''}
+                  onChange={(e) => setEditingItem({...editingItem, assigned_to: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Due Date</label>
+                <input
+                  type="date"
+                  value={editingItem.due_date ? editingItem.due_date.split('T')[0] : ''}
+                  onChange={(e) => setEditingItem({...editingItem, due_date: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditMaintenance(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Update Item
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Note Modal */}
+      {showAddNote && selectedMaintenanceItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Add Note</h2>
+            <form onSubmit={handleAddNote}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Note</label>
+                <textarea
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  rows="4"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddNote(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Add Note
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         {activeTab === "dashboard" && (
           <div className="space-y-6">
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
               <div className="bg-gray-800 rounded-lg p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -726,6 +1131,17 @@ const App = () => {
                   </div>
                   <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center">
                     <span className="text-white font-bold">FE</span>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-400">Pending Maintenance</p>
+                    <p className="text-3xl font-bold text-yellow-400">{dashboardData.maintenance.pending}</p>
+                  </div>
+                  <div className="w-12 h-12 bg-yellow-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">M</span>
                   </div>
                 </div>
               </div>
@@ -949,6 +1365,106 @@ const App = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "maintenance" && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Maintenance Items</h2>
+              <button
+                onClick={() => setShowAddMaintenance(true)}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Add Maintenance Item
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {maintenanceItems.map((item) => (
+                <div key={item.id} className="bg-gray-800 rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">{item.name}</h3>
+                      <p className="text-gray-400">{item.description}</p>
+                    </div>
+                    <div className={`w-4 h-4 rounded-full ${getStatusColor(item.status)}`}></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Status:</span>
+                      <span className={`font-medium ${getStatusColor(item.status).replace('bg-', 'text-')}`}>
+                        {getStatusText(item.status)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Priority:</span>
+                      <span className={`font-medium ${getPriorityColor(item.priority)}`}>
+                        {item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
+                      </span>
+                    </div>
+                    {item.assigned_to && (
+                      <div className="flex justify-between text-sm">
+                        <span>Assigned To:</span>
+                        <span>{item.assigned_to}</span>
+                      </div>
+                    )}
+                    {item.due_date && (
+                      <div className="flex justify-between text-sm">
+                        <span>Due Date:</span>
+                        <span className={getDaysUntil(item.due_date) <= 0 ? "text-red-400" : ""}>
+                          {formatDate(item.due_date)}
+                          <span className="text-gray-400"> ({getDaysUntil(item.due_date)} days)</span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Notes Section */}
+                  {item.notes && item.notes.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium mb-2">Notes:</h4>
+                      <div className="max-h-32 overflow-y-auto space-y-2">
+                        {item.notes.map((note) => (
+                          <div key={note.id} className="bg-gray-700 p-2 rounded text-sm">
+                            <p>{note.note}</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {formatDateTime(note.created_at)} - {note.created_by}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="mt-4 flex space-x-2">
+                    <button
+                      onClick={() => {
+                        setSelectedMaintenanceItem(item);
+                        setShowAddNote(true);
+                      }}
+                      className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      Add Note
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingItem(item);
+                        setShowEditMaintenance(true);
+                      }}
+                      className="flex-1 px-3 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMaintenanceItem(item.id)}
+                      className="flex-1 px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
