@@ -16,6 +16,21 @@ const App = () => {
     recent_alerts: []
   });
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginData, setLoginData] = useState({ username: "", password: "" });
+  const [showAddDetector, setShowAddDetector] = useState(false);
+  const [showAddExtinguisher, setShowAddExtinguisher] = useState(false);
+  const [showEditDetector, setShowEditDetector] = useState(false);
+  const [showEditExtinguisher, setShowEditExtinguisher] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [newDetector, setNewDetector] = useState({ name: "", location: "", battery_level: 100 });
+  const [newExtinguisher, setNewExtinguisher] = useState({ 
+    name: "", 
+    location: "", 
+    last_refill: "", 
+    last_pressure_test: "" 
+  });
 
   // Load data functions
   const loadDetectors = async () => {
@@ -67,6 +82,121 @@ const App = () => {
     const interval = setInterval(loadData, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Admin functions
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post(`${API}/admin/login`, loginData);
+      if (response.data.admin) {
+        setIsAdmin(true);
+        setShowLogin(false);
+        setLoginData({ username: "", password: "" });
+      }
+    } catch (error) {
+      alert("Invalid admin credentials");
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAdmin(false);
+    setShowLogin(false);
+  };
+
+  const handleAddDetector = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/admin/smoke-detectors`, newDetector, {
+        auth: { username: "admin", password: "firesafety2025" }
+      });
+      setNewDetector({ name: "", location: "", battery_level: 100 });
+      setShowAddDetector(false);
+      await loadDetectors();
+      await loadDashboard();
+    } catch (error) {
+      alert("Error adding detector");
+    }
+  };
+
+  const handleAddExtinguisher = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/admin/fire-extinguishers`, newExtinguisher, {
+        auth: { username: "admin", password: "firesafety2025" }
+      });
+      setNewExtinguisher({ name: "", location: "", last_refill: "", last_pressure_test: "" });
+      setShowAddExtinguisher(false);
+      await loadExtinguishers();
+      await loadDashboard();
+    } catch (error) {
+      alert("Error adding extinguisher");
+    }
+  };
+
+  const handleEditDetector = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put(`${API}/admin/smoke-detectors/${editingItem.id}`, {
+        name: editingItem.name,
+        location: editingItem.location,
+        battery_level: editingItem.battery_level
+      }, {
+        auth: { username: "admin", password: "firesafety2025" }
+      });
+      setShowEditDetector(false);
+      setEditingItem(null);
+      await loadDetectors();
+    } catch (error) {
+      alert("Error updating detector");
+    }
+  };
+
+  const handleEditExtinguisher = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put(`${API}/admin/fire-extinguishers/${editingItem.id}`, {
+        name: editingItem.name,
+        location: editingItem.location,
+        last_refill: editingItem.last_refill,
+        last_pressure_test: editingItem.last_pressure_test
+      }, {
+        auth: { username: "admin", password: "firesafety2025" }
+      });
+      setShowEditExtinguisher(false);
+      setEditingItem(null);
+      await loadExtinguishers();
+    } catch (error) {
+      alert("Error updating extinguisher");
+    }
+  };
+
+  const handleDeleteDetector = async (id) => {
+    if (window.confirm("Are you sure you want to delete this detector?")) {
+      try {
+        await axios.delete(`${API}/admin/smoke-detectors/${id}`, {
+          auth: { username: "admin", password: "firesafety2025" }
+        });
+        await loadDetectors();
+        await loadDashboard();
+      } catch (error) {
+        alert("Error deleting detector");
+      }
+    }
+  };
+
+  const handleDeleteExtinguisher = async (id) => {
+    if (window.confirm("Are you sure you want to delete this extinguisher?")) {
+      try {
+        await axios.delete(`${API}/admin/fire-extinguishers/${id}`, {
+          auth: { username: "admin", password: "firesafety2025" }
+        });
+        await loadExtinguishers();
+        await loadDashboard();
+      } catch (error) {
+        alert("Error deleting extinguisher");
+      }
+    }
+  };
 
   // Action functions
   const triggerDetector = async (detectorId) => {
@@ -157,7 +287,7 @@ const App = () => {
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="text-3xl">🔥</div>
+              <div className="text-3xl font-bold">FSMS</div>
               <div>
                 <h1 className="text-2xl font-bold">Fire Safety Management System</h1>
                 <p className="text-red-100">Real-time monitoring and alerts</p>
@@ -168,6 +298,21 @@ const App = () => {
                 <div>Active Detectors: {dashboardData.detectors.active}</div>
                 <div>Triggered: {dashboardData.detectors.triggered}</div>
               </div>
+              {isAdmin ? (
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 bg-red-800 text-white rounded hover:bg-red-900"
+                >
+                  Logout Admin
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowLogin(true)}
+                  className="px-4 py-2 bg-red-800 text-white rounded hover:bg-red-900"
+                >
+                  Admin Login
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -194,6 +339,300 @@ const App = () => {
         </div>
       </div>
 
+      {/* Login Modal */}
+      {showLogin && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Admin Login</h2>
+            <form onSubmit={handleLogin}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Username</label>
+                <input
+                  type="text"
+                  value={loginData.username}
+                  onChange={(e) => setLoginData({...loginData, username: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Password</label>
+                <input
+                  type="password"
+                  value={loginData.password}
+                  onChange={(e) => setLoginData({...loginData, password: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLogin(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  Login
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Detector Modal */}
+      {showAddDetector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Add Smoke Detector</h2>
+            <form onSubmit={handleAddDetector}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Name</label>
+                <input
+                  type="text"
+                  value={newDetector.name}
+                  onChange={(e) => setNewDetector({...newDetector, name: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Location</label>
+                <input
+                  type="text"
+                  value={newDetector.location}
+                  onChange={(e) => setNewDetector({...newDetector, location: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Battery Level (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={newDetector.battery_level}
+                  onChange={(e) => setNewDetector({...newDetector, battery_level: parseInt(e.target.value)})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddDetector(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Add Detector
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Extinguisher Modal */}
+      {showAddExtinguisher && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Add Fire Extinguisher</h2>
+            <form onSubmit={handleAddExtinguisher}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Name</label>
+                <input
+                  type="text"
+                  value={newExtinguisher.name}
+                  onChange={(e) => setNewExtinguisher({...newExtinguisher, name: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Location</label>
+                <input
+                  type="text"
+                  value={newExtinguisher.location}
+                  onChange={(e) => setNewExtinguisher({...newExtinguisher, location: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Last Refill Date</label>
+                <input
+                  type="date"
+                  value={newExtinguisher.last_refill}
+                  onChange={(e) => setNewExtinguisher({...newExtinguisher, last_refill: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Last Pressure Test Date</label>
+                <input
+                  type="date"
+                  value={newExtinguisher.last_pressure_test}
+                  onChange={(e) => setNewExtinguisher({...newExtinguisher, last_pressure_test: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddExtinguisher(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Add Extinguisher
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Detector Modal */}
+      {showEditDetector && editingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Edit Smoke Detector</h2>
+            <form onSubmit={handleEditDetector}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Name</label>
+                <input
+                  type="text"
+                  value={editingItem.name}
+                  onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Location</label>
+                <input
+                  type="text"
+                  value={editingItem.location}
+                  onChange={(e) => setEditingItem({...editingItem, location: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Battery Level (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={editingItem.battery_level}
+                  onChange={(e) => setEditingItem({...editingItem, battery_level: parseInt(e.target.value)})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditDetector(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Update Detector
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Extinguisher Modal */}
+      {showEditExtinguisher && editingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Edit Fire Extinguisher</h2>
+            <form onSubmit={handleEditExtinguisher}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Name</label>
+                <input
+                  type="text"
+                  value={editingItem.name}
+                  onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Location</label>
+                <input
+                  type="text"
+                  value={editingItem.location}
+                  onChange={(e) => setEditingItem({...editingItem, location: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Last Refill Date</label>
+                <input
+                  type="date"
+                  value={editingItem.last_refill ? editingItem.last_refill.split('T')[0] : ''}
+                  onChange={(e) => setEditingItem({...editingItem, last_refill: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Last Pressure Test Date</label>
+                <input
+                  type="date"
+                  value={editingItem.last_pressure_test ? editingItem.last_pressure_test.split('T')[0] : ''}
+                  onChange={(e) => setEditingItem({...editingItem, last_pressure_test: e.target.value})}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditExtinguisher(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Update Extinguisher
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         {activeTab === "dashboard" && (
@@ -206,7 +645,9 @@ const App = () => {
                     <p className="text-sm text-gray-400">Total Detectors</p>
                     <p className="text-3xl font-bold">{dashboardData.detectors.total}</p>
                   </div>
-                  <div className="text-4xl">🔔</div>
+                  <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">SD</span>
+                  </div>
                 </div>
               </div>
               <div className="bg-gray-800 rounded-lg p-6">
@@ -215,7 +656,9 @@ const App = () => {
                     <p className="text-sm text-gray-400">Active Detectors</p>
                     <p className="text-3xl font-bold text-green-400">{dashboardData.detectors.active}</p>
                   </div>
-                  <div className="text-4xl">✅</div>
+                  <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">OK</span>
+                  </div>
                 </div>
               </div>
               <div className="bg-gray-800 rounded-lg p-6">
@@ -224,7 +667,9 @@ const App = () => {
                     <p className="text-sm text-gray-400">Triggered Detectors</p>
                     <p className="text-3xl font-bold text-red-400">{dashboardData.detectors.triggered}</p>
                   </div>
-                  <div className="text-4xl">🚨</div>
+                  <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">!</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -260,6 +705,14 @@ const App = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Smoke Detectors</h2>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowAddDetector(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Add Detector
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {detectors.map((detector) => (
@@ -303,6 +756,25 @@ const App = () => {
                       Reset
                     </button>
                   </div>
+                  {isAdmin && (
+                    <div className="mt-2 flex space-x-2">
+                      <button
+                        onClick={() => {
+                          setEditingItem(detector);
+                          setShowEditDetector(true);
+                        }}
+                        className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteDetector(detector.id)}
+                        className="flex-1 px-3 py-2 bg-red-800 text-white rounded hover:bg-red-900"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -313,6 +785,14 @@ const App = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Fire Extinguishers</h2>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowAddExtinguisher(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Add Extinguisher
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {extinguishers.map((extinguisher) => (
@@ -354,6 +834,25 @@ const App = () => {
                       </span>
                     </div>
                   </div>
+                  {isAdmin && (
+                    <div className="mt-4 flex space-x-2">
+                      <button
+                        onClick={() => {
+                          setEditingItem(extinguisher);
+                          setShowEditExtinguisher(true);
+                        }}
+                        className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteExtinguisher(extinguisher.id)}
+                        className="flex-1 px-3 py-2 bg-red-800 text-white rounded hover:bg-red-900"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
