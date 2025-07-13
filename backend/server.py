@@ -52,6 +52,7 @@ class DetectorStatus(str, Enum):
 
 class ExtinguisherStatus(str, Enum):
     ACTIVE = "active"
+    TRIGGERED = "triggered"
     REFILL_DUE = "refill_due"
     PRESSURE_TEST_DUE = "pressure_test_due"
     MAINTENANCE = "maintenance"
@@ -83,6 +84,7 @@ class FireExtinguisher(BaseModel):
     name: str
     location: str
     status: ExtinguisherStatus = ExtinguisherStatus.ACTIVE
+    last_triggered: Optional[datetime] = None
     last_refill: datetime
     last_pressure_test: datetime
     next_refill_due: datetime
@@ -105,15 +107,19 @@ class FireExtinguisherUpdate(BaseModel):
 
 class Alert(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    detector_id: str
-    detector_name: str
-    detector_location: str
+    detector_id: Optional[str] = None
+    extinguisher_id: Optional[str] = None
+    detector_name: Optional[str] = None
+    extinguisher_name: Optional[str] = None
+    detector_location: Optional[str] = None
+    extinguisher_location: Optional[str] = None
     message: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     acknowledged: bool = False
 
 class AlertCreate(BaseModel):
-    detector_id: str
+    detector_id: Optional[str] = None
+    extinguisher_id: Optional[str] = None
     message: str
 
 class AdminLogin(BaseModel):
@@ -127,6 +133,9 @@ def calculate_due_dates(last_refill: datetime, last_pressure_test: datetime):
     return next_refill_due, next_pressure_test_due
 
 def check_extinguisher_status(extinguisher: FireExtinguisher) -> ExtinguisherStatus:
+    if extinguisher.status == ExtinguisherStatus.TRIGGERED:
+        return ExtinguisherStatus.TRIGGERED
+    
     now = datetime.utcnow()
     days_until_refill = (extinguisher.next_refill_due - now).days
     days_until_pressure_test = (extinguisher.next_pressure_test_due - now).days
@@ -137,6 +146,18 @@ def check_extinguisher_status(extinguisher: FireExtinguisher) -> ExtinguisherSta
         return ExtinguisherStatus.PRESSURE_TEST_DUE
     else:
         return ExtinguisherStatus.ACTIVE
+
+def is_extinguisher_due(extinguisher: FireExtinguisher) -> dict:
+    now = datetime.utcnow()
+    days_until_refill = (extinguisher.next_refill_due - now).days
+    days_until_pressure_test = (extinguisher.next_pressure_test_due - now).days
+    
+    return {
+        "refill_due": days_until_refill <= 30 or extinguisher.status == ExtinguisherStatus.TRIGGERED,
+        "pressure_test_due": days_until_pressure_test <= 30,
+        "days_until_refill": days_until_refill,
+        "days_until_pressure_test": days_until_pressure_test
+    }
 
 # Authentication endpoints
 @api_router.post("/admin/login")
@@ -262,6 +283,105 @@ async def get_fire_extinguisher(extinguisher_id: str):
     ext_obj.status = check_extinguisher_status(ext_obj)
     return ext_obj
 
+# Public Fire Extinguisher action endpoints
+@api_router.post("/fire-extinguishers/{extinguisher_id}/trigger")
+async def trigger_fire_extinguisher(extinguisher_id: str):
+    extinguisher = await db.fire_extinguishers.find_one({"id": extinguisher_id})
+    if not extinguisher:
+        raise HTTPException(status_code=404, detail="Fire extinguisher not found")
+    
+    # Update extinguisher status and set refill due to current date
+    now = datetime.utcnow()
+    next_refill_due, next_pressure_test_due = calculate_due_dates(now, extinguisher["last_pressure_test"])
+    
+    await db.fire_extinguishers.update_one(
+        {"id": extinguisher_id},
+        {"$set": {
+            "status": ExtinguisherStatus.TRIGGERED,
+            "last_triggered": now,
+            "next_refill_due": now,  # Set refill due to current date
+            "updated_at": now
+        }}
+    )
+    
+    # Create alert
+    alert = Alert(
+        extinguisher_id=extinguisher_id,
+        extinguisher_name=extinguisher["name"],
+        extinguisher_location=extinguisher["location"],
+        message=f"FIRE EXTINGUISHER USED at {extinguisher['location']} - {extinguisher['name']} - REFILL REQUIRED"
+    )
+    await db.alerts.insert_one(alert.dict())
+    
+    return {"message": "Fire extinguisher triggered successfully", "alert_id": alert.id}
+
+@api_router.post("/fire-extinguishers/{extinguisher_id}/refill")
+async def refill_fire_extinguisher(extinguisher_id: str):
+    extinguisher = await db.fire_extinguishers.find_one({"id": extinguisher_id})
+    if not extinguisher:
+        raise HTTPException(status_code=404, detail="Fire extinguisher not found")
+    
+    ext_obj = FireExtinguisher(**extinguisher)
+    due_status = is_extinguisher_due(ext_obj)
+    
+    if not due_status["refill_due"]:
+        raise HTTPException(status_code=400, detail="Fire extinguisher is not due for refill")
+    
+    # Update extinguisher with new refill date
+    now = datetime.utcnow()
+    next_refill_due, next_pressure_test_due = calculate_due_dates(now, extinguisher["last_pressure_test"])
+    
+    await db.fire_extinguishers.update_one(
+        {"id": extinguisher_id},
+        {"$set": {
+            "last_refill": now,
+            "next_refill_due": next_refill_due,
+            "status": ExtinguisherStatus.ACTIVE,
+            "updated_at": now
+        }}
+    )
+    
+    return {"message": "Fire extinguisher refilled successfully"}
+
+@api_router.post("/fire-extinguishers/{extinguisher_id}/pressure-test")
+async def pressure_test_fire_extinguisher(extinguisher_id: str):
+    extinguisher = await db.fire_extinguishers.find_one({"id": extinguisher_id})
+    if not extinguisher:
+        raise HTTPException(status_code=404, detail="Fire extinguisher not found")
+    
+    ext_obj = FireExtinguisher(**extinguisher)
+    due_status = is_extinguisher_due(ext_obj)
+    
+    if not due_status["pressure_test_due"]:
+        raise HTTPException(status_code=400, detail="Fire extinguisher is not due for pressure test")
+    
+    # Update extinguisher with new pressure test date
+    now = datetime.utcnow()
+    next_refill_due, next_pressure_test_due = calculate_due_dates(extinguisher["last_refill"], now)
+    
+    await db.fire_extinguishers.update_one(
+        {"id": extinguisher_id},
+        {"$set": {
+            "last_pressure_test": now,
+            "next_pressure_test_due": next_pressure_test_due,
+            "status": ExtinguisherStatus.ACTIVE,
+            "updated_at": now
+        }}
+    )
+    
+    return {"message": "Fire extinguisher pressure test completed successfully"}
+
+@api_router.get("/fire-extinguishers/{extinguisher_id}/due-status")
+async def get_extinguisher_due_status(extinguisher_id: str):
+    extinguisher = await db.fire_extinguishers.find_one({"id": extinguisher_id})
+    if not extinguisher:
+        raise HTTPException(status_code=404, detail="Fire extinguisher not found")
+    
+    ext_obj = FireExtinguisher(**extinguisher)
+    due_status = is_extinguisher_due(ext_obj)
+    
+    return due_status
+
 # Admin-only Fire Extinguisher endpoints
 @api_router.post("/admin/fire-extinguishers", response_model=FireExtinguisher)
 async def create_fire_extinguisher(extinguisher: FireExtinguisherCreate, admin: str = Depends(get_current_admin)):
@@ -350,6 +470,7 @@ async def get_dashboard():
     
     # Get extinguisher stats
     total_extinguishers = await db.fire_extinguishers.count_documents({})
+    triggered_extinguishers = await db.fire_extinguishers.count_documents({"status": "triggered"})
     
     # Get recent alerts
     recent_alerts = await db.alerts.find({"acknowledged": False}).sort("timestamp", -1).limit(10).to_list(10)
@@ -361,7 +482,8 @@ async def get_dashboard():
             "triggered": triggered_detectors
         },
         "extinguishers": {
-            "total": total_extinguishers
+            "total": total_extinguishers,
+            "triggered": triggered_extinguishers
         },
         "recent_alerts": [Alert(**alert) for alert in recent_alerts]
     }

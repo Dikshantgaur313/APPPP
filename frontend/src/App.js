@@ -12,7 +12,7 @@ const App = () => {
   const [alerts, setAlerts] = useState([]);
   const [dashboardData, setDashboardData] = useState({
     detectors: { total: 0, active: 0, triggered: 0 },
-    extinguishers: { total: 0 },
+    extinguishers: { total: 0, triggered: 0 },
     recent_alerts: []
   });
   const [loading, setLoading] = useState(true);
@@ -220,6 +220,39 @@ const App = () => {
     }
   };
 
+  const triggerExtinguisher = async (extinguisherId) => {
+    try {
+      await axios.post(`${API}/fire-extinguishers/${extinguisherId}/trigger`);
+      await loadExtinguishers();
+      await loadAlerts();
+      await loadDashboard();
+    } catch (error) {
+      console.error("Error triggering extinguisher:", error);
+    }
+  };
+
+  const refillExtinguisher = async (extinguisherId) => {
+    try {
+      await axios.post(`${API}/fire-extinguishers/${extinguisherId}/refill`);
+      await loadExtinguishers();
+      await loadDashboard();
+    } catch (error) {
+      console.error("Error refilling extinguisher:", error);
+      alert("Error refilling extinguisher. May not be due for refill.");
+    }
+  };
+
+  const testExtinguisher = async (extinguisherId) => {
+    try {
+      await axios.post(`${API}/fire-extinguishers/${extinguisherId}/pressure-test`);
+      await loadExtinguishers();
+      await loadDashboard();
+    } catch (error) {
+      console.error("Error testing extinguisher:", error);
+      alert("Error testing extinguisher. May not be due for pressure test.");
+    }
+  };
+
   const acknowledgeAlert = async (alertId) => {
     try {
       await axios.put(`${API}/alerts/${alertId}/acknowledge`);
@@ -272,10 +305,23 @@ const App = () => {
     }
   };
 
+  const isExtinguisherDue = (extinguisher) => {
+    const now = new Date();
+    const refillDue = new Date(extinguisher.next_refill_due);
+    const pressureTestDue = new Date(extinguisher.next_pressure_test_due);
+    const refillDays = Math.ceil((refillDue - now) / (1000 * 60 * 60 * 24));
+    const pressureTestDays = Math.ceil((pressureTestDue - now) / (1000 * 60 * 60 * 24));
+    
+    return {
+      refillDue: refillDays <= 30 || extinguisher.status === "triggered",
+      pressureTestDue: pressureTestDays <= 30
+    };
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading Fire Safety System...</div>
+        <div className="text-white text-xl">Loading APEX FIRE Protection System...</div>
       </div>
     );
   }
@@ -287,9 +333,9 @@ const App = () => {
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="text-3xl font-bold">FSMS</div>
+              <div className="text-3xl font-bold">APEX FIRE</div>
               <div>
-                <h1 className="text-2xl font-bold">Fire Safety Management System</h1>
+                <h1 className="text-2xl font-bold">APEX FIRE PROTECTION SYSTEM</h1>
                 <p className="text-red-100">Real-time monitoring and alerts</p>
               </div>
             </div>
@@ -638,7 +684,7 @@ const App = () => {
         {activeTab === "dashboard" && (
           <div className="space-y-6">
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-gray-800 rounded-lg p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -669,6 +715,17 @@ const App = () => {
                   </div>
                   <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center">
                     <span className="text-white font-bold">!</span>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-400">Triggered Extinguishers</p>
+                    <p className="text-3xl font-bold text-red-400">{dashboardData.extinguishers.triggered}</p>
+                  </div>
+                  <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold">FE</span>
                   </div>
                 </div>
               </div>
@@ -795,66 +852,103 @@ const App = () => {
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {extinguishers.map((extinguisher) => (
-                <div key={extinguisher.id} className="bg-gray-800 rounded-lg p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold">{extinguisher.name}</h3>
-                      <p className="text-gray-400">{extinguisher.location}</p>
+              {extinguishers.map((extinguisher) => {
+                const dueStatus = isExtinguisherDue(extinguisher);
+                return (
+                  <div key={extinguisher.id} className="bg-gray-800 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">{extinguisher.name}</h3>
+                        <p className="text-gray-400">{extinguisher.location}</p>
+                      </div>
+                      <div className={`w-4 h-4 rounded-full ${getStatusColor(extinguisher.status)}`}></div>
                     </div>
-                    <div className={`w-4 h-4 rounded-full ${getStatusColor(extinguisher.status)}`}></div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Status:</span>
-                      <span className={`font-medium ${extinguisher.status === "active" ? "text-green-400" : "text-yellow-400"}`}>
-                        {getStatusText(extinguisher.status)}
-                      </span>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>Status:</span>
+                        <span className={`font-medium ${extinguisher.status === "active" ? "text-green-400" : "text-yellow-400"}`}>
+                          {getStatusText(extinguisher.status)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Last Refill:</span>
+                        <span>{formatDate(extinguisher.last_refill)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Next Refill Due:</span>
+                        <span className={getDaysUntil(extinguisher.next_refill_due) <= 30 ? "text-red-400" : ""}>
+                          {formatDate(extinguisher.next_refill_due)}
+                          <span className="text-gray-400"> ({getDaysUntil(extinguisher.next_refill_due)} days)</span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Last Pressure Test:</span>
+                        <span>{formatDate(extinguisher.last_pressure_test)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Next Pressure Test:</span>
+                        <span className={getDaysUntil(extinguisher.next_pressure_test_due) <= 30 ? "text-red-400" : ""}>
+                          {formatDate(extinguisher.next_pressure_test_due)}
+                          <span className="text-gray-400"> ({getDaysUntil(extinguisher.next_pressure_test_due)} days)</span>
+                        </span>
+                      </div>
+                      {extinguisher.last_triggered && (
+                        <div className="flex justify-between text-sm">
+                          <span>Last Triggered:</span>
+                          <span>{formatDate(extinguisher.last_triggered)}</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Last Refill:</span>
-                      <span>{formatDate(extinguisher.last_refill)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Next Refill Due:</span>
-                      <span className={getDaysUntil(extinguisher.next_refill_due) <= 30 ? "text-red-400" : ""}>
-                        {formatDate(extinguisher.next_refill_due)}
-                        <span className="text-gray-400"> ({getDaysUntil(extinguisher.next_refill_due)} days)</span>
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Last Pressure Test:</span>
-                      <span>{formatDate(extinguisher.last_pressure_test)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Next Pressure Test:</span>
-                      <span className={getDaysUntil(extinguisher.next_pressure_test_due) <= 30 ? "text-red-400" : ""}>
-                        {formatDate(extinguisher.next_pressure_test_due)}
-                        <span className="text-gray-400"> ({getDaysUntil(extinguisher.next_pressure_test_due)} days)</span>
-                      </span>
-                    </div>
-                  </div>
-                  {isAdmin && (
                     <div className="mt-4 flex space-x-2">
                       <button
-                        onClick={() => {
-                          setEditingItem(extinguisher);
-                          setShowEditExtinguisher(true);
-                        }}
-                        className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        onClick={() => triggerExtinguisher(extinguisher.id)}
+                        className="flex-1 px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                       >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteExtinguisher(extinguisher.id)}
-                        className="flex-1 px-3 py-2 bg-red-800 text-white rounded hover:bg-red-900"
-                      >
-                        Delete
+                        Trigger
                       </button>
                     </div>
-                  )}
-                </div>
-              ))}
+                    {(dueStatus.refillDue || dueStatus.pressureTestDue) && (
+                      <div className="mt-2 flex space-x-2">
+                        {dueStatus.refillDue && (
+                          <button
+                            onClick={() => refillExtinguisher(extinguisher.id)}
+                            className="flex-1 px-3 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                          >
+                            Refill
+                          </button>
+                        )}
+                        {dueStatus.pressureTestDue && (
+                          <button
+                            onClick={() => testExtinguisher(extinguisher.id)}
+                            className="flex-1 px-3 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                          >
+                            Test
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {isAdmin && (
+                      <div className="mt-2 flex space-x-2">
+                        <button
+                          onClick={() => {
+                            setEditingItem(extinguisher);
+                            setShowEditExtinguisher(true);
+                          }}
+                          className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteExtinguisher(extinguisher.id)}
+                          className="flex-1 px-3 py-2 bg-red-800 text-white rounded hover:bg-red-900"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -879,7 +973,7 @@ const App = () => {
                     {alerts.map((alert) => (
                       <tr key={alert.id} className={`${alert.acknowledged ? "bg-gray-800" : "bg-red-900"}`}>
                         <td className="px-6 py-4 text-sm">{formatDate(alert.timestamp)}</td>
-                        <td className="px-6 py-4 text-sm">{alert.detector_location}</td>
+                        <td className="px-6 py-4 text-sm">{alert.detector_location || alert.extinguisher_location}</td>
                         <td className="px-6 py-4 text-sm">{alert.message}</td>
                         <td className="px-6 py-4 text-sm">
                           {alert.acknowledged ? (
