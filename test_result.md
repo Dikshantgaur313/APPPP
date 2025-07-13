@@ -200,7 +200,7 @@ backend:
           
   - task: "Fire Extinguisher CRUD Operations"
     implemented: true
-    working: true
+    working: "NA"
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
@@ -212,6 +212,9 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅ COMPREHENSIVE TESTING PASSED: All CRUD operations working perfectly with automatic due date calculations. Tested create (with proper due date calculation), read all/single (status updates), update (due date recalculation), and delete (with verification). All 5 test cases passed successfully."
+        - working: "NA"
+          agent: "testing"
+          comment: "ARCHITECTURE CHANGE: CRUD operations moved to admin-only endpoints. Public endpoints are now read-only. This task is superseded by 'Admin Fire Extinguisher CRUD Operations' task."
           
   - task: "Smoke Detector Trigger System"
     implemented: true
