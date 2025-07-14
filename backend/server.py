@@ -97,11 +97,14 @@ class FireExtinguisher(BaseModel):
     name: str
     location: str
     status: ExtinguisherStatus = ExtinguisherStatus.ACTIVE
+    dispatch_status: DispatchStatus = DispatchStatus.NONE
     last_triggered: Optional[datetime] = None
     last_refill: datetime
     last_pressure_test: datetime
     next_refill_due: datetime
     next_pressure_test_due: datetime
+    dispatch_date: Optional[datetime] = None
+    received_date: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
