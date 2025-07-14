@@ -384,6 +384,45 @@ const App = () => {
     }
   };
 
+  // Dispatch functions
+  const dispatchExtinguisher = async (id) => {
+    try {
+      await axios.post(`${API}/fire-extinguishers/${id}/dispatch`);
+      await loadExtinguishers();
+      await loadDispatchedExtinguishers();
+      await loadDashboard();
+    } catch (error) {
+      console.error("Error dispatching extinguisher:", error);
+      alert("Error dispatching extinguisher");
+    }
+  };
+
+  const receiveExtinguisher = async (id) => {
+    try {
+      await axios.post(`${API}/fire-extinguishers/${id}/receive`);
+      await loadExtinguishers();
+      await loadDispatchedExtinguishers();
+      await loadDashboard();
+    } catch (error) {
+      console.error("Error receiving extinguisher:", error);
+      alert("Error receiving extinguisher");
+    }
+  };
+
+  const updateDispatchStatus = async (id, status) => {
+    try {
+      await axios.put(`${API}/fire-extinguishers/${id}/dispatch-status`, status, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      await loadDispatchedExtinguishers();
+      await loadExtinguishers();
+      await loadDashboard();
+    } catch (error) {
+      console.error("Error updating dispatch status:", error);
+      alert("Error updating dispatch status");
+    }
+  };
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString();
   };
