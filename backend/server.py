@@ -58,6 +58,12 @@ class ExtinguisherStatus(str, Enum):
     PRESSURE_TEST_DUE = "pressure_test_due"
     MAINTENANCE = "maintenance"
 
+class DispatchStatus(str, Enum):
+    NONE = "none"
+    DISPATCHED = "dispatched"
+    UNDER_PROCESS = "under_process"
+    RECEIVED = "received"
+
 class MaintenanceItemStatus(str, Enum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
