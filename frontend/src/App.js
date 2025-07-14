@@ -96,6 +96,15 @@ const App = () => {
     }
   };
 
+  const loadDispatchedExtinguishers = async () => {
+    try {
+      const response = await axios.get(`${API}/fire-extinguishers/dispatched`);
+      setDispatchedExtinguishers(response.data);
+    } catch (error) {
+      console.error("Error loading dispatched extinguishers:", error);
+    }
+  };
+
   // Initial load
   useEffect(() => {
     const loadData = async () => {
