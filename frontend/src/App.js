@@ -462,6 +462,32 @@ const App = () => {
     }
   };
 
+  const getDispatchStatusColor = (status) => {
+    switch (status) {
+      case "dispatched":
+        return "bg-blue-500";
+      case "under_process":
+        return "bg-yellow-500";
+      case "received":
+        return "bg-green-500";
+      default:
+        return "bg-gray-500";
+    }
+  };
+
+  const getDispatchStatusText = (status) => {
+    switch (status) {
+      case "dispatched":
+        return "Dispatched";
+      case "under_process":
+        return "Under Process";
+      case "received":
+        return "Received";
+      default:
+        return "None";
+    }
+  };
+
   const getStatusText = (status) => {
     switch (status) {
       case "active":
