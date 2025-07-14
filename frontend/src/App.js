@@ -7,8 +7,10 @@ const API = `${BACKEND_URL}/api`;
 
 const App = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [extinguisherSubTab, setExtinguisherSubTab] = useState("extinguishers");
   const [detectors, setDetectors] = useState([]);
   const [extinguishers, setExtinguishers] = useState([]);
+  const [dispatchedExtinguishers, setDispatchedExtinguishers] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [maintenanceItems, setMaintenanceItems] = useState([]);
   const [dashboardData, setDashboardData] = useState({
