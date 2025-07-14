@@ -362,6 +362,18 @@ async def delete_smoke_detector(detector_id: str, admin: str = Depends(get_curre
     return {"message": "Smoke detector deleted successfully"}
 
 # Public Fire Extinguisher endpoints (read-only)
+@api_router.get("/fire-extinguishers/dispatched")
+async def get_dispatched_extinguishers():
+    extinguishers = await db.fire_extinguishers.find({
+        "dispatch_status": {"$ne": DispatchStatus.NONE}
+    }).to_list(1000)
+    
+    result = []
+    for ext in extinguishers:
+        ext_obj = FireExtinguisher(**ext)
+        result.append(ext_obj)
+    return result
+
 @api_router.get("/fire-extinguishers", response_model=List[FireExtinguisher])
 async def get_fire_extinguishers():
     extinguishers = await db.fire_extinguishers.find().to_list(1000)
