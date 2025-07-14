@@ -738,6 +738,7 @@ def main():
     test_smoke_detector_trigger_system()
     test_alert_management()
     test_dashboard_api()
+    test_dispatch_functionality()
     
     # Print summary
     success = print_summary()
