@@ -673,6 +673,91 @@ async def get_dashboard():
         "recent_alerts": [Alert(**alert) for alert in recent_alerts]
     }
 
+# Dispatch endpoints
+@api_router.post("/fire-extinguishers/{extinguisher_id}/dispatch")
+async def dispatch_extinguisher(extinguisher_id: str):
+    extinguisher = await db.fire_extinguishers.find_one({"id": extinguisher_id})
+    if not extinguisher:
+        raise HTTPException(status_code=404, detail="Fire extinguisher not found")
+    
+    # Update extinguisher dispatch status
+    now = datetime.utcnow()
+    await db.fire_extinguishers.update_one(
+        {"id": extinguisher_id},
+        {"$set": {
+            "dispatch_status": DispatchStatus.DISPATCHED,
+            "dispatch_date": now,
+            "updated_at": now
+        }}
+    )
+    
+    return {"message": "Fire extinguisher dispatched successfully"}
+
+@api_router.post("/fire-extinguishers/{extinguisher_id}/receive")
+async def receive_extinguisher(extinguisher_id: str):
+    extinguisher = await db.fire_extinguishers.find_one({"id": extinguisher_id})
+    if not extinguisher:
+        raise HTTPException(status_code=404, detail="Fire extinguisher not found")
+    
+    # Update extinguisher with received status and set refill date
+    now = datetime.utcnow()
+    next_refill_due, next_pressure_test_due = calculate_due_dates(now, extinguisher["last_pressure_test"])
+    
+    await db.fire_extinguishers.update_one(
+        {"id": extinguisher_id},
+        {"$set": {
+            "dispatch_status": DispatchStatus.RECEIVED,
+            "received_date": now,
+            "last_refill": now,
+            "next_refill_due": next_refill_due,
+            "status": ExtinguisherStatus.ACTIVE,
+            "updated_at": now
+        }}
+    )
+    
+    return {"message": "Fire extinguisher received and refill date updated successfully"}
+
+@api_router.put("/fire-extinguishers/{extinguisher_id}/dispatch-status")
+async def update_dispatch_status(extinguisher_id: str, dispatch_status: DispatchStatus):
+    extinguisher = await db.fire_extinguishers.find_one({"id": extinguisher_id})
+    if not extinguisher:
+        raise HTTPException(status_code=404, detail="Fire extinguisher not found")
+    
+    update_data = {
+        "dispatch_status": dispatch_status,
+        "updated_at": datetime.utcnow()
+    }
+    
+    # If status is being set to received, update refill date
+    if dispatch_status == DispatchStatus.RECEIVED:
+        now = datetime.utcnow()
+        next_refill_due, next_pressure_test_due = calculate_due_dates(now, extinguisher["last_pressure_test"])
+        update_data.update({
+            "received_date": now,
+            "last_refill": now,
+            "next_refill_due": next_refill_due,
+            "status": ExtinguisherStatus.ACTIVE
+        })
+    
+    await db.fire_extinguishers.update_one(
+        {"id": extinguisher_id},
+        {"$set": update_data}
+    )
+    
+    return {"message": "Dispatch status updated successfully"}
+
+@api_router.get("/fire-extinguishers/dispatched")
+async def get_dispatched_extinguishers():
+    extinguishers = await db.fire_extinguishers.find({
+        "dispatch_status": {"$ne": DispatchStatus.NONE}
+    }).to_list(1000)
+    
+    result = []
+    for ext in extinguishers:
+        ext_obj = FireExtinguisher(**ext)
+        result.append(ext_obj)
+    return result
+
 # Include the router in the main app
 app.include_router(api_router)
 
