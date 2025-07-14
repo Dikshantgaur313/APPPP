@@ -495,6 +495,206 @@ def test_dashboard_api():
     except:
         pass
 
+def test_dispatch_functionality():
+    """Test Fire Extinguisher Dispatch Functionality"""
+    print("\n=== Testing Fire Extinguisher Dispatch Functionality ===")
+    
+    # First create a fire extinguisher for testing
+    try:
+        now = datetime.utcnow()
+        create_data = {
+            "name": "Dispatch Test Extinguisher",
+            "location": "Dispatch Test Area",
+            "last_refill": (now - timedelta(days=30)).isoformat(),
+            "last_pressure_test": (now - timedelta(days=60)).isoformat()
+        }
+        response = requests.post(f"{API_URL}/fire-extinguishers", json=create_data)
+        if response.status_code == 200:
+            extinguisher = response.json()
+            extinguisher_id = extinguisher["id"]
+            log_test("dispatch_functionality", "Setup test extinguisher", True)
+        else:
+            log_test("dispatch_functionality", "Setup test extinguisher", False, f"Status: {response.status_code}")
+            return
+    except Exception as e:
+        log_test("dispatch_functionality", "Setup test extinguisher", False, str(e))
+        return
+
+    # Test 1: Dispatch an extinguisher
+    try:
+        response = requests.post(f"{API_URL}/fire-extinguishers/{extinguisher_id}/dispatch")
+        if response.status_code == 200:
+            result = response.json()
+            if "message" in result and "dispatched successfully" in result["message"]:
+                log_test("dispatch_functionality", "Dispatch extinguisher", True)
+                
+                # Verify dispatch status was updated
+                ext_response = requests.get(f"{API_URL}/fire-extinguishers/{extinguisher_id}")
+                if ext_response.status_code == 200:
+                    ext_data = ext_response.json()
+                    if ext_data["dispatch_status"] == "dispatched" and ext_data["dispatch_date"]:
+                        log_test("dispatch_functionality", "Verify dispatch status after dispatch", True)
+                    else:
+                        log_test("dispatch_functionality", "Verify dispatch status after dispatch", False, f"Status: {ext_data['dispatch_status']}")
+                else:
+                    log_test("dispatch_functionality", "Verify dispatch status after dispatch", False, "Could not fetch extinguisher")
+            else:
+                log_test("dispatch_functionality", "Dispatch extinguisher", False, "Invalid response message")
+        else:
+            log_test("dispatch_functionality", "Dispatch extinguisher", False, f"Status: {response.status_code}")
+    except Exception as e:
+        log_test("dispatch_functionality", "Dispatch extinguisher", False, str(e))
+
+    # Test 2: Get dispatched extinguishers
+    try:
+        response = requests.get(f"{API_URL}/fire-extinguishers/dispatched")
+        if response.status_code == 200:
+            dispatched_extinguishers = response.json()
+            if isinstance(dispatched_extinguishers, list) and len(dispatched_extinguishers) > 0:
+                # Check if our extinguisher is in the list
+                found_extinguisher = next((ext for ext in dispatched_extinguishers if ext["id"] == extinguisher_id), None)
+                if found_extinguisher and found_extinguisher["dispatch_status"] == "dispatched":
+                    log_test("dispatch_functionality", "Get dispatched extinguishers", True)
+                else:
+                    log_test("dispatch_functionality", "Get dispatched extinguishers", False, "Dispatched extinguisher not found in list")
+            else:
+                log_test("dispatch_functionality", "Get dispatched extinguishers", False, "No dispatched extinguishers found")
+        else:
+            log_test("dispatch_functionality", "Get dispatched extinguishers", False, f"Status: {response.status_code}")
+    except Exception as e:
+        log_test("dispatch_functionality", "Get dispatched extinguishers", False, str(e))
+
+    # Test 3: Update dispatch status to "under_process"
+    try:
+        response = requests.put(f"{API_URL}/fire-extinguishers/{extinguisher_id}/dispatch-status", 
+                               json="under_process", 
+                               headers={"Content-Type": "application/json"})
+        if response.status_code == 200:
+            result = response.json()
+            if "message" in result and "updated successfully" in result["message"]:
+                log_test("dispatch_functionality", "Update dispatch status to under_process", True)
+                
+                # Verify status was updated
+                ext_response = requests.get(f"{API_URL}/fire-extinguishers/{extinguisher_id}")
+                if ext_response.status_code == 200:
+                    ext_data = ext_response.json()
+                    if ext_data["dispatch_status"] == "under_process":
+                        log_test("dispatch_functionality", "Verify dispatch status update to under_process", True)
+                    else:
+                        log_test("dispatch_functionality", "Verify dispatch status update to under_process", False, f"Status: {ext_data['dispatch_status']}")
+                else:
+                    log_test("dispatch_functionality", "Verify dispatch status update to under_process", False, "Could not fetch extinguisher")
+            else:
+                log_test("dispatch_functionality", "Update dispatch status to under_process", False, "Invalid response message")
+        else:
+            log_test("dispatch_functionality", "Update dispatch status to under_process", False, f"Status: {response.status_code}")
+    except Exception as e:
+        log_test("dispatch_functionality", "Update dispatch status to under_process", False, str(e))
+
+    # Test 4: Mark as received (should update refill date)
+    try:
+        response = requests.post(f"{API_URL}/fire-extinguishers/{extinguisher_id}/receive")
+        if response.status_code == 200:
+            result = response.json()
+            if "message" in result and "received" in result["message"] and "refill date updated" in result["message"]:
+                log_test("dispatch_functionality", "Mark extinguisher as received", True)
+                
+                # Verify status and refill date were updated
+                ext_response = requests.get(f"{API_URL}/fire-extinguishers/{extinguisher_id}")
+                if ext_response.status_code == 200:
+                    ext_data = ext_response.json()
+                    if (ext_data["dispatch_status"] == "received" and 
+                        ext_data["received_date"] and 
+                        ext_data["status"] == "active"):
+                        log_test("dispatch_functionality", "Verify received status and refill date update", True)
+                    else:
+                        log_test("dispatch_functionality", "Verify received status and refill date update", False, 
+                               f"Status: {ext_data['dispatch_status']}, Received date: {ext_data.get('received_date')}, Extinguisher status: {ext_data['status']}")
+                else:
+                    log_test("dispatch_functionality", "Verify received status and refill date update", False, "Could not fetch extinguisher")
+            else:
+                log_test("dispatch_functionality", "Mark extinguisher as received", False, "Invalid response message")
+        else:
+            log_test("dispatch_functionality", "Mark extinguisher as received", False, f"Status: {response.status_code}")
+    except Exception as e:
+        log_test("dispatch_functionality", "Mark extinguisher as received", False, str(e))
+
+    # Test 5: Verify dispatch status tracking workflow
+    try:
+        # Create another extinguisher to test full workflow
+        create_data2 = {
+            "name": "Workflow Test Extinguisher",
+            "location": "Workflow Test Area",
+            "last_refill": (now - timedelta(days=30)).isoformat(),
+            "last_pressure_test": (now - timedelta(days=60)).isoformat()
+        }
+        response = requests.post(f"{API_URL}/fire-extinguishers", json=create_data2)
+        if response.status_code == 200:
+            extinguisher2 = response.json()
+            extinguisher2_id = extinguisher2["id"]
+            
+            # Test workflow: none -> dispatched -> under_process -> received
+            workflow_steps = [
+                ("dispatched", f"{API_URL}/fire-extinguishers/{extinguisher2_id}/dispatch", "POST"),
+                ("under_process", f"{API_URL}/fire-extinguishers/{extinguisher2_id}/dispatch-status", "PUT"),
+                ("received", f"{API_URL}/fire-extinguishers/{extinguisher2_id}/receive", "POST")
+            ]
+            
+            workflow_success = True
+            for expected_status, url, method in workflow_steps:
+                if method == "POST":
+                    if "dispatch-status" in url:
+                        continue  # Skip this step for POST
+                    step_response = requests.post(url)
+                elif method == "PUT":
+                    step_response = requests.put(url, json=expected_status, headers={"Content-Type": "application/json"})
+                
+                if step_response.status_code != 200:
+                    workflow_success = False
+                    break
+                
+                # Verify status
+                verify_response = requests.get(f"{API_URL}/fire-extinguishers/{extinguisher2_id}")
+                if verify_response.status_code == 200:
+                    ext_data = verify_response.json()
+                    if ext_data["dispatch_status"] != expected_status:
+                        workflow_success = False
+                        break
+                else:
+                    workflow_success = False
+                    break
+            
+            if workflow_success:
+                log_test("dispatch_functionality", "Complete dispatch workflow tracking", True)
+            else:
+                log_test("dispatch_functionality", "Complete dispatch workflow tracking", False, "Workflow step failed")
+            
+            # Cleanup second extinguisher
+            requests.delete(f"{API_URL}/fire-extinguishers/{extinguisher2_id}")
+        else:
+            log_test("dispatch_functionality", "Complete dispatch workflow tracking", False, "Could not create second test extinguisher")
+    except Exception as e:
+        log_test("dispatch_functionality", "Complete dispatch workflow tracking", False, str(e))
+
+    # Test 6: Test dispatch status values validation
+    try:
+        # Test invalid dispatch status
+        response = requests.put(f"{API_URL}/fire-extinguishers/{extinguisher_id}/dispatch-status", 
+                               json="invalid_status", 
+                               headers={"Content-Type": "application/json"})
+        if response.status_code == 422:  # Validation error expected
+            log_test("dispatch_functionality", "Validate dispatch status enum values", True)
+        else:
+            log_test("dispatch_functionality", "Validate dispatch status enum values", False, f"Expected 422, got {response.status_code}")
+    except Exception as e:
+        log_test("dispatch_functionality", "Validate dispatch status enum values", False, str(e))
+
+    # Cleanup test extinguisher
+    try:
+        requests.delete(f"{API_URL}/fire-extinguishers/{extinguisher_id}")
+    except:
+        pass
+
 def print_summary():
     """Print test summary"""
     print("\n" + "="*60)
