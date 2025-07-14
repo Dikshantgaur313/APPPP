@@ -118,6 +118,7 @@ class FireExtinguisherUpdate(BaseModel):
     name: Optional[str] = None
     location: Optional[str] = None
     status: Optional[ExtinguisherStatus] = None
+    dispatch_status: Optional[DispatchStatus] = None
     last_refill: Optional[datetime] = None
     last_pressure_test: Optional[datetime] = None
 
