@@ -1334,7 +1334,7 @@ const App = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Fire Extinguishers</h2>
-              {isAdmin && (
+              {isAdmin && extinguisherSubTab === "extinguishers" && (
                 <button
                   onClick={() => setShowAddExtinguisher(true)}
                   className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
@@ -1343,105 +1343,227 @@ const App = () => {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {extinguishers.map((extinguisher) => {
-                const dueStatus = isExtinguisherDue(extinguisher);
-                return (
+            
+            {/* Sub-tabs */}
+            <div className="flex space-x-4 border-b border-gray-600">
+              <button
+                onClick={() => setExtinguisherSubTab("extinguishers")}
+                className={`py-2 px-4 ${extinguisherSubTab === "extinguishers" ? "border-b-2 border-red-600 text-red-400" : "text-gray-400"}`}
+              >
+                Extinguishers
+              </button>
+              <button
+                onClick={() => setExtinguisherSubTab("status")}
+                className={`py-2 px-4 ${extinguisherSubTab === "status" ? "border-b-2 border-red-600 text-red-400" : "text-gray-400"}`}
+              >
+                Current Status
+              </button>
+            </div>
+
+            {/* Extinguishers Tab */}
+            {extinguisherSubTab === "extinguishers" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {extinguishers.map((extinguisher) => {
+                  const dueStatus = isExtinguisherDue(extinguisher);
+                  return (
+                    <div key={extinguisher.id} className="bg-gray-800 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="text-lg font-semibold">{extinguisher.name}</h3>
+                          <p className="text-gray-400">{extinguisher.location}</p>
+                        </div>
+                        <div className={`w-4 h-4 rounded-full ${getStatusColor(extinguisher.status)}`}></div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Status:</span>
+                          <span className={`font-medium ${extinguisher.status === "active" ? "text-green-400" : "text-yellow-400"}`}>
+                            {getStatusText(extinguisher.status)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Last Refill:</span>
+                          <span>{formatDate(extinguisher.last_refill)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Next Refill Due:</span>
+                          <span className={getDaysUntil(extinguisher.next_refill_due) <= 30 ? "text-red-400" : ""}>
+                            {formatDate(extinguisher.next_refill_due)}
+                            <span className="text-gray-400"> ({getDaysUntil(extinguisher.next_refill_due)} days)</span>
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Last Pressure Test:</span>
+                          <span>{formatDate(extinguisher.last_pressure_test)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Next Pressure Test:</span>
+                          <span className={getDaysUntil(extinguisher.next_pressure_test_due) <= 30 ? "text-red-400" : ""}>
+                            {formatDate(extinguisher.next_pressure_test_due)}
+                            <span className="text-gray-400"> ({getDaysUntil(extinguisher.next_pressure_test_due)} days)</span>
+                          </span>
+                        </div>
+                        {extinguisher.last_triggered && (
+                          <div className="flex justify-between text-sm">
+                            <span>Last Triggered:</span>
+                            <span>{formatDate(extinguisher.last_triggered)}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-4 flex space-x-2">
+                        <button
+                          onClick={() => triggerExtinguisher(extinguisher.id)}
+                          className="flex-1 px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                        >
+                          Trigger
+                        </button>
+                      </div>
+                      {(dueStatus.refillDue || dueStatus.pressureTestDue) && (
+                        <div className="mt-2 flex space-x-2">
+                          {dueStatus.refillDue && (
+                            <button
+                              onClick={() => refillExtinguisher(extinguisher.id)}
+                              className="flex-1 px-3 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                            >
+                              Refill
+                            </button>
+                          )}
+                          {dueStatus.pressureTestDue && (
+                            <button
+                              onClick={() => testExtinguisher(extinguisher.id)}
+                              className="flex-1 px-3 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                            >
+                              Test
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* New Dispatch/Receive Buttons */}
+                      <div className="mt-2 flex space-x-2">
+                        <button
+                          onClick={() => dispatchExtinguisher(extinguisher.id)}
+                          className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Dispatch
+                        </button>
+                        <button
+                          onClick={() => receiveExtinguisher(extinguisher.id)}
+                          className="flex-1 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                        >
+                          Received
+                        </button>
+                      </div>
+                      
+                      {isAdmin && (
+                        <div className="mt-2 flex space-x-2">
+                          <button
+                            onClick={() => {
+                              setEditingItem(extinguisher);
+                              setShowEditExtinguisher(true);
+                            }}
+                            className="flex-1 px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteExtinguisher(extinguisher.id)}
+                            className="flex-1 px-3 py-2 bg-red-800 text-white rounded hover:bg-red-900"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Current Status Tab */}
+            {extinguisherSubTab === "status" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {dispatchedExtinguishers.map((extinguisher) => (
                   <div key={extinguisher.id} className="bg-gray-800 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <h3 className="text-lg font-semibold">{extinguisher.name}</h3>
                         <p className="text-gray-400">{extinguisher.location}</p>
                       </div>
-                      <div className={`w-4 h-4 rounded-full ${getStatusColor(extinguisher.status)}`}></div>
+                      <div className={`w-4 h-4 rounded-full ${getDispatchStatusColor(extinguisher.dispatch_status)}`}></div>
                     </div>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span>Status:</span>
-                        <span className={`font-medium ${extinguisher.status === "active" ? "text-green-400" : "text-yellow-400"}`}>
-                          {getStatusText(extinguisher.status)}
+                        <span>Dispatch Status:</span>
+                        <span className={`font-medium ${extinguisher.dispatch_status === "received" ? "text-green-400" : extinguisher.dispatch_status === "dispatched" ? "text-blue-400" : "text-yellow-400"}`}>
+                          {getDispatchStatusText(extinguisher.dispatch_status)}
                         </span>
                       </div>
+                      {extinguisher.dispatch_date && (
+                        <div className="flex justify-between text-sm">
+                          <span>Dispatch Date:</span>
+                          <span>{formatDate(extinguisher.dispatch_date)}</span>
+                        </div>
+                      )}
+                      {extinguisher.received_date && (
+                        <div className="flex justify-between text-sm">
+                          <span>Received Date:</span>
+                          <span>{formatDate(extinguisher.received_date)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-sm">
                         <span>Last Refill:</span>
                         <span>{formatDate(extinguisher.last_refill)}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span>Next Refill Due:</span>
-                        <span className={getDaysUntil(extinguisher.next_refill_due) <= 30 ? "text-red-400" : ""}>
-                          {formatDate(extinguisher.next_refill_due)}
-                          <span className="text-gray-400"> ({getDaysUntil(extinguisher.next_refill_due)} days)</span>
-                        </span>
+                        <span>{formatDate(extinguisher.next_refill_due)}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Last Pressure Test:</span>
-                        <span>{formatDate(extinguisher.last_pressure_test)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Next Pressure Test:</span>
-                        <span className={getDaysUntil(extinguisher.next_pressure_test_due) <= 30 ? "text-red-400" : ""}>
-                          {formatDate(extinguisher.next_pressure_test_due)}
-                          <span className="text-gray-400"> ({getDaysUntil(extinguisher.next_pressure_test_due)} days)</span>
-                        </span>
-                      </div>
-                      {extinguisher.last_triggered && (
-                        <div className="flex justify-between text-sm">
-                          <span>Last Triggered:</span>
-                          <span>{formatDate(extinguisher.last_triggered)}</span>
-                        </div>
-                      )}
                     </div>
-                    <div className="mt-4 flex space-x-2">
-                      <button
-                        onClick={() => triggerExtinguisher(extinguisher.id)}
-                        className="flex-1 px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                      >
-                        Trigger
-                      </button>
-                    </div>
-                    {(dueStatus.refillDue || dueStatus.pressureTestDue) && (
-                      <div className="mt-2 flex space-x-2">
-                        {dueStatus.refillDue && (
-                          <button
-                            onClick={() => refillExtinguisher(extinguisher.id)}
-                            className="flex-1 px-3 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
-                          >
-                            Refill
-                          </button>
-                        )}
-                        {dueStatus.pressureTestDue && (
-                          <button
-                            onClick={() => testExtinguisher(extinguisher.id)}
-                            className="flex-1 px-3 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
-                          >
-                            Test
-                          </button>
-                        )}
+                    
+                    {/* Status Change Buttons */}
+                    {extinguisher.dispatch_status === "dispatched" && (
+                      <div className="mt-4 flex space-x-2">
+                        <button
+                          onClick={() => updateDispatchStatus(extinguisher.id, "under_process")}
+                          className="flex-1 px-3 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                        >
+                          Under Process
+                        </button>
+                        <button
+                          onClick={() => updateDispatchStatus(extinguisher.id, "received")}
+                          className="flex-1 px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                        >
+                          Received
+                        </button>
                       </div>
                     )}
-                    {isAdmin && (
-                      <div className="mt-2 flex space-x-2">
+                    
+                    {extinguisher.dispatch_status === "under_process" && (
+                      <div className="mt-4 flex space-x-2">
                         <button
-                          onClick={() => {
-                            setEditingItem(extinguisher);
-                            setShowEditExtinguisher(true);
-                          }}
-                          className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                          onClick={() => updateDispatchStatus(extinguisher.id, "received")}
+                          className="flex-1 px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700"
                         >
-                          Edit
+                          Received
                         </button>
-                        <button
-                          onClick={() => handleDeleteExtinguisher(extinguisher.id)}
-                          className="flex-1 px-3 py-2 bg-red-800 text-white rounded hover:bg-red-900"
-                        >
-                          Delete
-                        </button>
+                      </div>
+                    )}
+                    
+                    {extinguisher.dispatch_status === "received" && (
+                      <div className="mt-4 text-center text-green-400 font-medium">
+                        ✓ Refill Completed
                       </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
+                ))}
+                {dispatchedExtinguishers.length === 0 && (
+                  <div className="col-span-full text-center text-gray-400 py-8">
+                    No dispatched extinguishers
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
