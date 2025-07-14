@@ -109,7 +109,7 @@ const App = () => {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([loadDetectors(), loadExtinguishers(), loadAlerts(), loadMaintenanceItems(), loadDashboard()]);
+      await Promise.all([loadDetectors(), loadExtinguishers(), loadAlerts(), loadMaintenanceItems(), loadDashboard(), loadDispatchedExtinguishers()]);
       setLoading(false);
     };
     loadData();
