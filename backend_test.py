@@ -35,7 +35,8 @@ test_results = {
     "fire_extinguisher_crud": {"passed": 0, "failed": 0, "errors": []},
     "smoke_detector_trigger": {"passed": 0, "failed": 0, "errors": []},
     "alert_management": {"passed": 0, "failed": 0, "errors": []},
-    "dashboard_api": {"passed": 0, "failed": 0, "errors": []}
+    "dashboard_api": {"passed": 0, "failed": 0, "errors": []},
+    "dispatch_functionality": {"passed": 0, "failed": 0, "errors": []}
 }
 
 def log_test(category, test_name, success, error_msg=None):
